@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4&5月长租订单渠道来源分析</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"Microsoft YaHei",sans-serif;background:#f0f2f5;padding:20px;color:#333}
+.header{text-align:center;margin-bottom:20px}
+.header h1{font-size:26px;color:#1a1a1a}
+.header .sub{color:#888;font-size:13px;margin-top:5px}
+.drop-zone{border:3px dashed #bbb;border-radius:12px;padding:35px;text-align:center;margin-bottom:20px;background:#fafafa;transition:all .3s;cursor:pointer}
+.drop-zone.dragover{border-color:#5470c6;background:#eef2ff;transform:scale(1.01)}
+.drop-zone p{font-size:16px;color:#555}
+.drop-zone .hint{font-size:12px;color:#999;margin-top:8px}
+.tab-bar{display:flex;gap:0;margin-bottom:20px;border-bottom:2px solid #e8e8e8;background:#fff;border-radius:8px 8px 0 0;padding:0 10px}
+.tab-btn{padding:12px 28px;border:none;background:none;cursor:pointer;font-size:15px;font-family:inherit;color:#666;border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .2s}
+.tab-btn:hover{color:#5470c6}
+.tab-btn.active{color:#5470c6;font-weight:bold;border-bottom-color:#5470c6}
+.tab-content{display:none}
+.tab-content.active{display:block}
+.city-section{background:#fff;border-radius:12px;padding:24px;margin-bottom:24px;box-shadow:0 2px 12px rgba(0,0,0,.06)}
+.kpi-row{display:flex;gap:12px;margin:15px 0;flex-wrap:wrap}
+.kpi-card{flex:1;min-width:140px;border-radius:10px;padding:18px;text-align:center;color:#fff}
+.kpi-card .label{font-size:13px;opacity:.9}
+.kpi-card .value{font-size:28px;font-weight:bold;margin-top:6px}
+.kpi-purple{background:linear-gradient(135deg,#667eea,#764ba2)}
+.kpi-green{background:linear-gradient(135deg,#11998e,#38ef7d)}
+.kpi-orange{background:linear-gradient(135deg,#f093fb,#f5576c)}
+.kpi-blue{background:linear-gradient(135deg,#4facfe,#00f2fe)}
+.kpi-yellow{background:linear-gradient(135deg,#f7971e,#ffd200)}
+.kpi-teal{background:linear-gradient(135deg,#43e97b,#38f9d7)}
+.chart-row{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px}
+.chart-box{background:#fff;border-radius:10px;padding:18px;border:1px solid #eee;box-shadow:0 1px 6px rgba(0,0,0,.03)}
+.chart-box.full{grid-column:1/-1}
+.chart-title{font-size:14px;font-weight:600;color:#333;margin-bottom:10px;padding-left:8px;border-left:3px solid #5470c6}
+.chart{width:100%;height:350px}
+.chart.tall{height:420px}
+.empty-state{text-align:center;padding:80px 20px;color:#999}
+.empty-state .icon{font-size:60px;margin-bottom:16px}
+.empty-state p{font-size:16px}
+.note{text-align:center;color:#999;font-size:12px;margin-top:24px}
+@media(max-width:768px){.chart-row{grid-template-columns:1fr}.kpi-card{min-width:100px}}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>📊 4&5月长租订单渠道来源分析</h1>
+  <div class="sub" id="dataSummary">请上传数据文件以开始分析</div>
+</div>
+
+<div class="drop-zone" id="dropZone">
+  <p>📂 将Excel文件拖拽到此处，或点击选择文件</p>
+  <div class="hint">支持格式：与"4&5月长租订单渠道数据.xlsx"相同结构的文件</div>
+  <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none">
+</div>
+
+<div id="mainContent" style="display:none">
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="switchTab('wuhan',this)">🏙️ 武汉</button>
+    <button class="tab-btn" onclick="switchTab('changsha',this)">🏙️ 长沙</button>
+    <button class="tab-btn" onclick="switchTab('hefei',this)">🏙️ 合肥</button>
+  </div>
+
+  <div id="tab-wuhan" class="tab-content active">
+    <div class="city-section">
+      <div class="kpi-row" id="kpi-wuhan"></div>
+      <div class="chart-row">
+        <div class="chart-box full"><div class="chart-title">每日订单趋势（按渠道大类）</div><div class="chart tall" id="chart-trend-wuhan"></div></div>
+      </div>
+      <div class="chart-row">
+        <div class="chart-box"><div class="chart-title">渠道大类占比</div><div class="chart" id="chart-pie-major-wuhan"></div></div>
+        <div class="chart-box"><div class="chart-title">细分渠道占比</div><div class="chart" id="chart-pie-sub-wuhan"></div></div>
+      </div>
+      <div class="chart-row">
+        <div class="chart-box full"><div class="chart-title">各细分渠道每日订单量</div><div class="chart tall" id="chart-bar-wuhan"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-changsha" class="tab-content">
+    <div class="city-section">
+      <div class="kpi-row" id="kpi-changsha"></div>
+      <div class="chart-row">
+        <div class="chart-box full"><div class="chart-title">每日订单趋势（按渠道大类）</div><div class="chart tall" id="chart-trend-changsha"></div></div>
+      </div>
+      <div class="chart-row">
+        <div class="chart-box"><div class="chart-title">渠道大类占比</div><div class="chart" id="chart-pie-major-changsha"></div></div>
+        <div class="chart-box"><div class="chart-title">细分渠道占比</div><div class="chart" id="chart-pie-sub-changsha"></div></div>
+      </div>
+      <div class="chart-row">
+        <div class="chart-box full"><div class="chart-title">各细分渠道每日订单量</div><div class="chart tall" id="chart-bar-changsha"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-hefei" class="tab-content">
+    <div class="city-section">
+      <div class="kpi-row" id="kpi-hefei"></div>
+      <div class="chart-row">
+        <div class="chart-box full"><div class="chart-title">每日订单趋势（按渠道大类）</div><div class="chart tall" id="chart-trend-hefei"></div></div>
+      </div>
+      <div class="chart-row">
+        <div class="chart-box"><div class="chart-title">渠道大类占比</div><div class="chart" id="chart-pie-major-hefei"></div></div>
+        <div class="chart-box"><div class="chart-title">细分渠道占比</div><div class="chart" id="chart-pie-sub-hefei"></div></div>
+      </div>
+      <div class="chart-row">
+        <div class="chart-box full"><div class="chart-title">各细分渠道每日订单量</div><div class="chart tall" id="chart-bar-hefei"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="emptyState" class="empty-state">
+  <div class="icon">📁</div>
+  <p>拖拽或点击上方区域上传数据文件</p>
+</div>
+
+<div class="note">长租订单渠道来源分析 · 数据驱动决策</div>
+
+<script>
+// ===== Global State =====
+let parsedData = null;
+let chartInstances = [];
+
+const cityMap = {"武汉":"wuhan","长沙":"changsha","合肥":"hefei"};
+const majorCategories = ["站点","门店","渠道拓展","美团抖音","新媒体","私域"];
+const majorColors = {"站点":"#5470c6","门店":"#91cc75","渠道拓展":"#fac858","美团抖音":"#ee6666","新媒体":"#73c0de","私域":"#fc8452"};
+const subColors = ['#5470c6','#91cc75','#fac858','#ee6666','#73c0de','#fc8452','#3ba272','#9a60b4','#ea7ccc','#5ab1ef','#d87a80','#2ec7c9','#b6a2de'];
+
+// ===== File Upload =====
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (file) processFile(file);
+});
+fileInput.addEventListener('change', e => {
+    if (e.target.files[0]) processFile(e.target.files[0]);
+});
+
+function processFile(file) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, {type:'array'});
+            const sheet = workbook.Sheets[workbook.SheetNames[0]];
+            const raw = XLSX.utils.sheet_to_json(sheet, {header:1, defval:null});
+            parseData(raw);
+        } catch(err) {
+            alert('文件解析失败：' + err.message);
+        }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+function parseData(raw) {
+    // Row 0: major category headers
+    // Row 1: sub category headers
+    // Row 2: city headers (日期, 武汉, 长沙, 合肥 repeated)
+    // Row 3+: data
+
+    const row0 = raw[0] || [];
+    const row1 = raw[1] || [];
+
+    // Build channel mapping
+    const channels = [];
+
+    // Parse major categories from row 0
+    const majorPositions = [];
+    for (let i = 1; i < row0.length; i++) {
+        if (row0[i] && row0[i].toString().trim()) {
+            majorPositions.push({col: i, name: row0[i].toString().trim()});
+        }
+    }
+
+    // Parse sub categories from row 1
+    const subPositions = [];
+    for (let i = 1; i < row1.length; i++) {
+        if (row1[i] && row1[i].toString().trim()) {
+            subPositions.push({col: i, name: row1[i].toString().trim()});
+        }
+    }
+
+    // Each sub-category spans 3 columns (武汉, 长沙, 合肥)
+    let majorIdx = 0;
+    for (let si = 0; si < subPositions.length; si++) {
+        const subCol = subPositions[si].col;
+        while (majorIdx < majorPositions.length - 1 && majorPositions[majorIdx + 1].col <= subCol) {
+            majorIdx++;
+        }
+        channels.push({
+            major: majorPositions[majorIdx].name,
+            sub: subPositions[si].name,
+            cols: [subCol, subCol + 1, subCol + 2]
+        });
+    }
+
+    // Parse data rows
+    const cities = ["武汉", "长沙", "合肥"];
+    const dates = [];
+    const dataByCity = {"武汉":{}, "长沙":{}, "合肥":{}};
+
+    for (let r = 3; r < raw.length; r++) {
+        const row = raw[r];
+        if (!row || row[0] == null) continue;
+
+        // Check if row has any non-null numeric data
+        let hasData = false;
+        for (let c = 1; c < row.length; c++) {
+            if (row[c] != null && row[c] !== '' && !isNaN(row[c])) {
+                hasData = true;
+                break;
+            }
+        }
+        if (!hasData) continue;
+
+        // Convert Excel serial date
+        let dateStr;
+        const dateVal = row[0];
+        if (typeof dateVal === 'number' && dateVal > 40000) {
+            const d = new Date((dateVal - 25569) * 86400000);
+            dateStr = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+        } else if (dateVal instanceof Date) {
+            dateStr = dateVal.getFullYear() + '-' + String(dateVal.getMonth()+1).padStart(2,'0') + '-' + String(dateVal.getDate()).padStart(2,'0');
+        } else {
+            dateStr = String(dateVal);
+        }
+
+        dates.push(dateStr);
+
+        for (let ci = 0; ci < cities.length; ci++) {
+            const city = cities[ci];
+            if (!dataByCity[city][dateStr]) dataByCity[city][dateStr] = {};
+            for (const ch of channels) {
+                const col = ch.cols[ci];
+                const val = (row[col] != null && !isNaN(row[col])) ? Number(row[col]) : 0;
+                const key = ch.major + '-' + ch.sub;
+                dataByCity[city][dateStr][key] = val;
+            }
+        }
+    }
+
+    parsedData = { dates, cities, channels, dataByCity };
+
+    // Update UI
+    document.getElementById('mainContent').style.display = 'block';
+    document.getElementById('emptyState').style.display = 'none';
+    document.getElementById('dataSummary').textContent =
+        '数据范围：' + dates[0] + ' 至 ' + dates[dates.length-1] + '，共 ' + dates.length + ' 天';
+
+    // Render first tab
+    renderCity('武汉');
+}
+
+// ===== Tab Switching =====
+function switchTab(cityKey, btn) {
+    const reverseMap = {"wuhan":"武汉","changsha":"长沙","hefei":"合肥"};
+    document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + cityKey).classList.add('active');
+    setTimeout(() => renderCity(reverseMap[cityKey]), 50);
+}
+
+// ===== Data Helpers =====
+function getMajorData(city) {
+    const result = {};
+    majorCategories.forEach(m => result[m] = 0);
+    parsedData.dates.forEach(date => {
+        const dayData = parsedData.dataByCity[city][date];
+        if (!dayData) return;
+        parsedData.channels.forEach(ch => {
+            const key = ch.major + '-' + ch.sub;
+            if (result[ch.major] !== undefined) result[ch.major] += (dayData[key] || 0);
+        });
+    });
+    return result;
+}
+
+function getSubData(city) {
+    const result = {};
+    parsedData.channels.forEach(ch => { result[ch.major+'-'+ch.sub] = 0; });
+    parsedData.dates.forEach(date => {
+        const dayData = parsedData.dataByCity[city][date];
+        if (!dayData) return;
+        parsedData.channels.forEach(ch => {
+            const key = ch.major+'-'+ch.sub;
+            result[key] += (dayData[key] || 0);
+        });
+    });
+    return result;
+}
+
+function getDailyMajorData(city) {
+    const result = {};
+    majorCategories.forEach(m => result[m] = []);
+    parsedData.dates.forEach(date => {
+        const dayData = parsedData.dataByCity[city][date];
+        const dayMajor = {};
+        majorCategories.forEach(m => dayMajor[m] = 0);
+        if (dayData) {
+            parsedData.channels.forEach(ch => {
+                const key = ch.major+'-'+ch.sub;
+                if (dayMajor[ch.major] !== undefined) dayMajor[ch.major] += (dayData[key] || 0);
+            });
+        }
+        majorCategories.forEach(m => result[m].push(dayMajor[m]));
+    });
+    return result;
+}
+
+function getDailySubData(city) {
+    const result = {};
+    parsedData.channels.forEach(ch => { result[ch.major+'-'+ch.sub] = []; });
+    parsedData.dates.forEach(date => {
+        const dayData = parsedData.dataByCity[city][date];
+        parsedData.channels.forEach(ch => {
+            const key = ch.major+'-'+ch.sub;
+            result[key].push(dayData ? (dayData[key] || 0) : 0);
+        });
+    });
+    return result;
+}
+
+// ===== Rendering =====
+function renderCity(city) {
+    if (!parsedData) return;
+    const cityKey = cityMap[city];
+
+    // KPI cards
+    const majorData = getMajorData(city);
+    const total = Object.values(majorData).reduce((a,b) => a+b, 0);
+    const avgDaily = (total / parsedData.dates.length).toFixed(1);
+    const kpiColors = ['kpi-purple','kpi-green','kpi-orange','kpi-blue','kpi-yellow','kpi-teal'];
+
+    let kpiHtml = '<div class="kpi-card kpi-blue"><div class="value">'+total+'</div><div class="label">总订单数</div></div>';
+    kpiHtml += '<div class="kpi-card kpi-green"><div class="value">'+avgDaily+'</div><div class="label">日均订单</div></div>';
+    majorCategories.forEach((m, i) => {
+        if (majorData[m] > 0) {
+            const pct = ((majorData[m]/total)*100).toFixed(1);
+            kpiHtml += '<div class="kpi-card '+kpiColors[i%kpiColors.length]+'"><div class="value">'+majorData[m]+'</div><div class="label">'+m+' ('+pct+'%)</div></div>';
+        }
+    });
+    document.getElementById('kpi-'+cityKey).innerHTML = kpiHtml;
+
+    // Charts
+    renderTrendChart(city, cityKey);
+    renderPieMajor(city, cityKey);
+    renderPieSub(city, cityKey);
+    renderBarChart(city, cityKey);
+}
+
+function initChart(id) {
+    const dom = document.getElementById(id);
+    if (!dom) return null;
+    let instance = echarts.getInstanceByDom(dom);
+    if (instance) instance.dispose();
+    instance = echarts.init(dom, null, {devicePixelRatio: window.devicePixelRatio * 2 || 2});
+    chartInstances.push(instance);
+    window.addEventListener('resize', () => instance.resize());
+    return instance;
+}
+
+function renderTrendChart(city, cityKey) {
+    const chart = initChart('chart-trend-'+cityKey);
+    if (!chart) return;
+    const dailyMajor = getDailyMajorData(city);
+    const shortDates = parsedData.dates.map(d => d.substring(5));
+
+    const series = majorCategories.map(m => ({
+        name: m, type:'line',
+        emphasis:{focus:'series'}, smooth:true,
+        symbol:'circle', symbolSize:6,
+        lineStyle:{width:2.5},
+        label:{show:true,fontSize:10,position:'top',formatter:'{c}'},
+        data: dailyMajor[m], itemStyle:{color:majorColors[m]}
+    }));
+
+    chart.setOption({
+        tooltip:{trigger:'axis',axisPointer:{type:'cross'}},
+        legend:{data:majorCategories,top:0},
+        grid:{left:50,right:30,top:40,bottom:40},
+        xAxis:{type:'category',data:shortDates,axisLabel:{rotate:45,fontSize:11}},
+        yAxis:{type:'value',name:'订单数'},
+        series:series
+    });
+}
+
+function renderPieMajor(city, cityKey) {
+    const chart = initChart('chart-pie-major-'+cityKey);
+    if (!chart) return;
+    const majorData = getMajorData(city);
+    const data = majorCategories.filter(m => majorData[m]>0).map(m => ({
+        name:m, value:majorData[m], itemStyle:{color:majorColors[m]}
+    }));
+
+    chart.setOption({
+        tooltip:{trigger:'item',formatter:'{b}: {c} ({d}%)'},
+        legend:{orient:'vertical',right:10,top:'center',textStyle:{fontSize:12}},
+        series:[{
+            type:'pie',radius:['35%','65%'],center:['40%','50%'],
+            avoidLabelOverlap:true,
+            itemStyle:{borderRadius:6,borderColor:'#fff',borderWidth:2},
+            label:{show:true,formatter:'{b}\n{d}%'},
+            data:data
+        }]
+    });
+}
+
+function renderPieSub(city, cityKey) {
+    const chart = initChart('chart-pie-sub-'+cityKey);
+    if (!chart) return;
+    const subData = getSubData(city);
+    const data = parsedData.channels
+        .filter(ch => subData[ch.major+'-'+ch.sub] > 0)
+        .map((ch,i) => ({
+            name: ch.sub === ch.major ? ch.sub : ch.major+'-'+ch.sub,
+            value: subData[ch.major+'-'+ch.sub]
+        }));
+
+    chart.setOption({
+        tooltip:{trigger:'item',formatter:'{b}: {c} ({d}%)'},
+        legend:{orient:'vertical',right:10,top:'center',textStyle:{fontSize:11}},
+        series:[{
+            type:'pie',radius:['30%','60%'],center:['35%','50%'],
+            roseType:'radius',
+            itemStyle:{borderRadius:4,borderColor:'#fff',borderWidth:1},
+            label:{show:true,formatter:'{b}: {c} ({d}%)',fontSize:11,overflow:'truncate'},
+            labelLine:{show:true,length:10,length2:8},
+            data:data
+        }]
+    });
+}
+
+function renderBarChart(city, cityKey) {
+    const chart = initChart('chart-bar-'+cityKey);
+    if (!chart) return;
+    const dailySub = getDailySubData(city);
+    const shortDates = parsedData.dates.map(d => d.substring(5));
+
+    const series = parsedData.channels.map((ch,i) => {
+        const name = ch.sub === ch.major ? ch.sub : ch.major+'-'+ch.sub;
+        return {
+            name:name, type:'bar', stack:'total',
+            emphasis:{focus:'series'},
+            data: dailySub[ch.major+'-'+ch.sub],
+            itemStyle:{color:subColors[i%subColors.length]}
+        };
+    });
+    const legendData = parsedData.channels.map(ch => ch.sub===ch.major ? ch.sub : ch.major+'-'+ch.sub);
+
+    chart.setOption({
+        tooltip:{trigger:'axis',axisPointer:{type:'shadow'}},
+        legend:{data:legendData,top:0,textStyle:{fontSize:10},type:'scroll'},
+        grid:{left:50,right:30,top:50,bottom:40},
+        xAxis:{type:'category',data:shortDates,axisLabel:{rotate:45,fontSize:10}},
+        yAxis:{type:'value',name:'订单数'},
+        series:series
+    });
+}
+</script>
+</body>
+</html>
